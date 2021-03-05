@@ -189,7 +189,7 @@ Wraps a *N*-dimensional array as a `StrongArray`
 indexed by the *N* given types `T1`, `T2`, etc.
 """
 wrap(::Tuple{}, a) = a
-wrap(types, a::AbstractArray) =
+wrap(types::Tuple{Any,Vararg{Any}}, a::AbstractArray) =
 	StrongArray{length(types),Tuple{types...},eltype(a),typeof(a)}(Val(:nocopy), a)
 
 (A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Tuple) where{N,I,T} =
