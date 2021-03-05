@@ -1,6 +1,3 @@
-# todo: pairs
-# wrap pairs(a.array)
-
 module StrongArrays
 
 using Base: tail, OneTo, AbstractCartesianIndex, @propagate_inbounds
@@ -15,6 +12,15 @@ end
 @inline tuple_take(::Val{0}, itr, state...) = ()
 	
 # Strong integers««1
+"""
+    StrongInt{S}
+
+Strongly-typed alias of integers.
+
+The symbol `S` is used for domain separation.
+
+Use the `@StrongInt` macro to generate such a type.
+"""
 struct StrongInt{S} <: Integer
 	value::Int
 end
@@ -33,6 +39,12 @@ Base.:mod(a::J, b::Integer) where{J<:StrongInt} = J(mod(Int(a),b))
 # oneunit(J::Type{<:StrongInt}) = J(1)
 # zero(J::Type{<:StrongInt}) = J(0)
 
+"""
+    @StrongInt MyIndexType
+
+Generates a new strongly-typed `Int` alias,
+along with the `Base.show` method that goes with it.
+"""
 macro StrongInt(name)
 	quote
 		$(esc(name)) = StrongInt{$(QuoteNode(name))}
@@ -148,6 +160,13 @@ end
 # Arrays««1
 # Type ««2
 # I is a tuple of index types
+"""
+    StrongArray{N,I,T,A}
+
+Wrapper for an array of type `A`, exposed as an `AbstractArray{T,N}`,
+with index types for each coordinates given by the Tuple of types `I`.
+
+"""
 struct StrongArray{N,I<:Tuple{Vararg{Integer}},T,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
 	array::A
 	StrongArray{N,I,T,A}(a) where{N,I,T,A} = new{N,I,T,A}(copy(a))
@@ -162,6 +181,16 @@ StrongArray{N,I,T}(a) where{N,I,T} =
 # 	StrongArray{eltype(a),N,I,A}(a)
 StrongArray{N,I}(a::AbstractArray) where{N,I} =
 	StrongArray{N,I,eltype(a)}(a)
+
+"""
+    StrongArrays.wrap((T1,T2), array)
+
+Wraps a *N*-dimensional array as a `StrongArray`
+indexed by the *N* given types `T1`, `T2`, etc.
+"""
+wrap(::Tuple{}, a) = a
+wrap(types, a::AbstractArray) =
+	StrongArray{length(types),Tuple{types...},eltype(a),typeof(a)}(Val(:nocopy), a)
 
 (A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Tuple) where{N,I,T} =
 	A(Array{T}(undef, dims))
@@ -206,6 +235,7 @@ Base.axes(a::StrongArray) = (map(((t,n),)->OneTo(t(n)),
 	newidx = ()
 	newtypes = ()
 	# could be unrolled as a recursive call instead?
+	# let's place our hopes on constant propagation for now
 	for i in 1:N
 		(j, keep) = _to_index(indextypes(a)[i], idx[i], size(a)[i], i)
 		newidx = (newidx..., j)
@@ -223,9 +253,7 @@ end
 @inline @propagate_inbounds function Base.getindex(a::StrongArray, idx...)
 	(newidx, newtypes) = _to_indices(a, idx)
 	r = getindex(a.array, newidx...)
-	(newtypes == ()) && return r
-	return StrongArray{length(newtypes),Tuple{newtypes...},
-		eltype(r),typeof(r)}(Val(:nocopy), r)
+	return wrap(newtypes, r)
 end
 
 @inline @propagate_inbounds function Base.setindex!(a::StrongArray,
@@ -238,6 +266,12 @@ end
 		setindex!(a.array, Array(v), newidx...)
 	end
 	return v
+end
+
+@inline @propagate_inbounds function Base.view(a::StrongArray, idx...)
+	(newidx, newtypes) = _to_indices(a, idx)
+	v = view(a.array, newidx...)
+	return wrap(newtypes, v)
 end
 
 Base.to_index(a::AbstractArray, i::StrongInt) =
@@ -280,8 +314,20 @@ end
 	typeof(idx)(Broadcast.newindex(CartesianIndex(idx), keep, Int.(Idefault)))
 
 # StrongVector and StrongMatrix ««2
-StrongVector{S} = StrongArray{1,Tuple{S}}
-StrongMatrix{S1,S2} = StrongArray{2,Tuple{S1,S2}}
+"""
+    StrongVector{T}
+
+One-dimensional vector with strongly-typed index of type `T`.
+`StrongVector{T,X}` has index type `T` and data type `X`.
+"""
+StrongVector{T} = StrongArray{1,Tuple{T}}
+"""
+    StrongMatrix{T1,T2}
+
+Two-dimensional matrix with strongly-typed indices of type `T1` and `T2`.
+`StrongMatrix{T1,T2,X}` has index types `T1`,`T2` and data type `X`.
+"""
+StrongMatrix{T1,T2} = StrongArray{2,Tuple{T1,T2}}
 
 Base.LinearIndices(v::StrongVector) = OneTo(indextypes(v)[1](length(v)))
 
