@@ -5,7 +5,16 @@ module StrongArrays
 
 using Base: tail, OneTo, AbstractCartesianIndex, @propagate_inbounds
 using Base.Broadcast: Broadcasted
+using StaticArrays
 
+# Tools««1
+# Tuple unrolling««2
+@inline function tuple_take(::Val{N}, itr, state...) where{N}
+	(value, newstate) = iterate(itr, state...)
+	return (value, tuple_take(Val(N-1), itr, newstate)...)
+end
+@inline tuple_take(::Val{0}, itr, state...) = ()
+	
 # Strong integers««1
 struct StrongInt{S} <: Integer
 	value::Int
@@ -46,7 +55,7 @@ Base.promote(a::StrongInt, b::StrongInt) =
 	 throw(IncompatibleTypes(typeof(a), typeof(b)))
 Base.promote(a::T, b::T) where{T<:StrongInt} = (a,b)
 
-Base.show(io::IO, x::StrongInt) = print(io, name(x), "(", Int(x), ")")
+# Base.show(io::IO, x::StrongInt) = print(io, name(x), "(", Int(x), ")")
 Base.string(x::StrongInt) = string(name(x))*"("*string(Int(x))*")"
 
 # Ranges««1
@@ -143,19 +152,22 @@ end
 struct StrongArray{N,I<:Tuple{Vararg{Integer}},T,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
 	array::A
 	StrongArray{N,I,T,A}(a) where{N,I,T,A} = new{N,I,T,A}(a)
-	StrongArray{N,I,T}(a::AbstractArray{T,N}) where{N,I,T} =
-		new{N,I,T,typeof(a)}(a)
 end
-(A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Tuple) where{N,I,T} =
-	A(Array{T}(undef, dims))
-(A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Int...) where{N,I,T} =
-	A(undef, dims)
+StrongArray{N,I,T}(a::AbstractArray{T,N}) where{N,I,T} =
+		StrongArray{N,I,T,typeof(a)}(a)
 StrongArray{N,I,T}(a) where{N,I,T} =
 	StrongArray{N,I,T}(AbstractArray{T,N}(a))
 # (::Type{StrongArray{X,N,I,A} where{X}})(a::AbstractArray) where{N,I,A} =
 # 	StrongArray{eltype(a),N,I,A}(a)
-(::Type{<:StrongArray{N,I}})(a::AbstractArray) where{N,I} =
+StrongArray{N,I}(a::AbstractArray) where{N,I} =
 	StrongArray{N,I,eltype(a)}(a)
+
+(A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Tuple) where{N,I,T} =
+	A(Array{T}(undef, dims))
+(A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Int...) where{N,I,T} =
+	A(undef, dims)
+
+Array{T,N}(a::StrongArray{N}) where{T,N} = Array{T,N}(a.array)
 
 @inline Base.ndims(::Type{<:StrongArray{N}}) where{N} = N
 @inline Base.ndims(a::StrongArray) = ndims(typeof(a))
@@ -181,25 +193,42 @@ Base.show(io::IO, a::StrongArray) =
 
 Base.axes(a::StrongArray) = (map(((t,n),)->OneTo(t(n)),
 	zip(indextypes(a), size(a)))...,)
+# to_index: returns a pair (real index, keep this dimension)
 @inline _to_index(T::Type{<:Integer}, i, n, k) =
 	throw(TypeError(:StrongArray, "coordinate $k", T, i))
-@inline _to_index(::Type{T}, i::T, n, k) where{T<:Integer} = Int(i)
+@inline _to_index(::Type{T}, i::T, n, k) where{T<:Integer} =
+	(Int(i), false)
 @inline _to_index(::Type{T}, i::AbstractVector{T}, n, k) where{T<:Integer} =
-	Integer.(i)
-@inline _to_index(::Type{<:Integer}, ::Colon, n, k) = (:)
-
+	(Integer.(i), true)
+@inline _to_index(::Type{<:Integer}, ::Colon, n, k) = ((:), true)
+@inline function _to_indices(a::StrongArray{N}, idx) where{N}
+	newidx = ()
+	newtypes = ()
+	# could be unrolled as a recursive call instead?
+	for i in 1:N
+		(j, keep) = _to_index(indextypes(a)[i], idx[i], size(a)[i], i)
+		newidx = (newidx..., j)
+		keep && (newtypes = (newtypes..., indextypes(a)[i]))
+	end
+	return (newidx, newtypes)
+end
 # Base.getindex(a::StrongArray, idx::CartesianIndex) = getindex(a.array, idx)
-@propagate_inbounds Base.getindex(a::StrongArray,
+@inline @propagate_inbounds Base.getindex(a::StrongArray,
 		idx::StrongCartesianIndex{N,I}) where{T,N,I} =
 	getindex(a.array, Int.(Tuple(idx))...)
-@propagate_inbounds Base.setindex!(a::StrongArray, v,
+@inline @propagate_inbounds Base.setindex!(a::StrongArray, v,
 		idx::StrongCartesianIndex{N,I}) where{T,N,I} =
 	setindex!(a.array, v, Int.(Tuple(idx))...)
-Base.getindex(a::StrongArray, idx...) = getindex(a.array,
-	map(x->_to_index(x...), zip(indextypes(a), idx, size(a), 1:ndims(a)))...)
+@inline @propagate_inbounds function Base.getindex(a::StrongArray, idx...)
+	(newidx, newtypes) = _to_indices(a, idx)
+	r = getindex(a.array, newidx...)
+	(newtypes == ()) && return r
+	return StrongArray{length(newtypes),Tuple{newtypes...}}(r)
+end
 
-Base.setindex!(a::StrongArray, v, idx::Integer...) = setindex!(a.array, v,
-	map(x->_to_index(x...), zip(indextypes(a), idx, size(a), 1:ndims(a)))...)
+Base.setindex!(a::StrongArray, v, idx::Integer...) =
+	setindex!(a.array, v, _to_indices(a, idx)...)
+# disable getindex and setindex
  
 # Similar and broadcast««2
 Base.similar(a::StrongArray, ::Type{T}, dims::Dims{N}) where{T,N} =
