@@ -2,3 +2,6 @@ name = "StrongArrays"
 uuid = "f9ca7a67-c2e2-4466-990c-34d70e009e45"
 authors = ["Jerome Plut <jerome@fugue.cf>"]
 version = "0.1.0"
+
+[compat]
+Julia="1.5"
