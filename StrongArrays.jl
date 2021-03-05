@@ -140,42 +140,42 @@ end
 # Arrays««1
 # Type ««2
 # I is a tuple of index types
-struct StrongArray{T,N,I<:Tuple{Vararg{Integer}},A<:AbstractArray{T,N}} <: AbstractArray{T,N}
+struct StrongArray{N,I<:Tuple{Vararg{Integer}},T,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
 	array::A
-	StrongArray{T,N,I,A}(a) where{T,N,I,A} = new{T,N,I,A}(a)
-	StrongArray{T,N,I}(a::AbstractArray{T,N}) where{T,N,I} =
-		new{T,N,I,typeof(a)}(a)
+	StrongArray{N,I,T,A}(a) where{N,I,T,A} = new{N,I,T,A}(a)
+	StrongArray{N,I,T}(a::AbstractArray{T,N}) where{N,I,T} =
+		new{N,I,T,typeof(a)}(a)
 end
-(A::Type{<:StrongArray{T,N,I}})(::UndefInitializer, dims::Tuple) where{T,N,I} =
+(A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Tuple) where{N,I,T} =
 	A(Array{T}(undef, dims))
-(A::Type{<:StrongArray{T,N,I}})(::UndefInitializer, dims::Int...) where{T,N,I} =
+(A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Int...) where{N,I,T} =
 	A(undef, dims)
-StrongArray{T,N,I}(a) where{T,N,I} =
-	StrongArray{T,N,I}(AbstractArray{T,N}(a))
+StrongArray{N,I,T}(a) where{N,I,T} =
+	StrongArray{N,I,T}(AbstractArray{T,N}(a))
 # (::Type{StrongArray{X,N,I,A} where{X}})(a::AbstractArray) where{N,I,A} =
 # 	StrongArray{eltype(a),N,I,A}(a)
-(::Type{<:StrongArray{X,N,I} where{X}})(a::AbstractArray) where{N,I} =
-	StrongArray{eltype(a),N,I}(a)
+(::Type{<:StrongArray{N,I}})(a::AbstractArray) where{N,I} =
+	StrongArray{N,I,eltype(a)}(a)
 
-@inline Base.eltype(::Type{<:StrongArray{T}}) where{T} = T
-@inline Base.eltype(a::StrongArray) = eltype(typeof(a))
-@inline Base.ndims(::Type{<:StrongArray{T,N}}) where{T,N} = N
+@inline Base.ndims(::Type{<:StrongArray{N}}) where{N} = N
 @inline Base.ndims(a::StrongArray) = ndims(typeof(a))
-@inline indextype(::Type{<:StrongArray{X,Y,I} where{X,Y}}) where{I} = I
+@inline indextype(::Type{<:StrongArray{N,I}}) where{N,I} = I
 @inline indextype(a::StrongArray) = indextype(a)
+@inline Base.eltype(::Type{<:StrongArray{N,I,T}}) where{N,I,T} = T
+@inline Base.eltype(a::StrongArray) = eltype(typeof(a))
 
 # Indexation ««2
 Base.size(a::StrongArray) = size(a.array)
-# indextype(::Type{<:StrongArray{T,N,I}}) where{T,N,I} = I
 indextype(a::StrongArray) = indextype(typeof(a))
 indextypes(a::StrongArray) = (indextype(a).parameters...,)
 function Base.show(io::IO, T::MIME"text/plain", a::StrongArray)
-	print(io, "StrongArray on ", indextype(a))
+	print(io, "StrongArray{", indextype(a), "} wrapping ")
 	show(io, T, a.array)
 end
 
 Base.show(io::IO, a::StrongArray) =
-	print(io, "StrongArray on ", indextype(a), a.array)
+	print(io, "StrongArray{", ndims(a), ",", indextype(a), "}(",
+		a.array, ")")
 
 # Iteration««2
 
@@ -203,11 +203,11 @@ Base.setindex!(a::StrongArray, v, idx::Integer...) = setindex!(a.array, v,
  
 # Similar and broadcast««2
 Base.similar(a::StrongArray, ::Type{T}, dims::Dims{N}) where{T,N} =
-	StrongArray{T,ndims(a),indextype(a)}(similar(a.array, T, dims))
+	StrongArray{ndims(a),indextype(a),T}(similar(a.array, T, dims))
 # this is a (compatible) domain extension of the definition of
 # `Broadcast.axistype` (hence slight piracy).
 Broadcast.axistype(a::T,b::T) where{T<:OneTo} = a
-Broadcast.axistype(a::OneTo, b::OneTo) = throw(DimensionMismatch(
+Broadcast.axistype(a::OneTo, b::OneTo) = throw(DmensionMismatch(
 	"Index types $(typeof(a.stop)) and $(typeof(b.stop)) are incompatible"))
 
 struct StrongArrayStyle{N,I} <: Broadcast.AbstractArrayStyle{N} end
@@ -217,7 +217,7 @@ Base.BroadcastStyle(T::Type{<:StrongArray}) =
 	StrongArrayStyle{ndims(T),indextype(T)}()
 Broadcast.similar(bc::Broadcast.Broadcasted{StrongArrayStyle{N,I}},
 		::Type{T}, dims) where{N,I,T} =
-	similar(StrongArray{T,N,I}, dims)
+	similar(StrongArray{N,I,T}, dims)
 
 @inline function copyto!(dest::StrongArray, bc::Broadcast.Broadcasted{Nothing})
 	c = copyto!(dest.array, bc)
@@ -237,8 +237,8 @@ end
 	typeof(idx)(Broadcast.newindex(CartesianIndex(idx), keep, Int.(Idefault)))
 
 # StrongVector and StrongMatrix ««2
-StrongVector{S,T,A} = StrongArray{T,1,Tuple{S},A}
-StrongMatrix{S1,S2,T,A} = StrongArray{T,2,Tuple{S1,S2},A}
+StrongVector{S} = StrongArray{1,Tuple{S}}
+StrongMatrix{S1,S2} = StrongArray{2,Tuple{S1,S2}}
 
 Base.LinearIndices(v::StrongVector) = OneTo(indextypes(v)[1](length(v)))
 
