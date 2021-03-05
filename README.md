@@ -1,7 +1,12 @@
 # StrongArrays
 
 This package introduces arrays with strongly typed indices,
-with zero performance cost.
+
+Using these “funny integers” as indices prevents accidentally using the
+wrong variable for indexing an array. Since everything uses very thin
+wrappers of the standard array types, this should have zero performance
+cost.
+
 
 ## Example
 ```julia
