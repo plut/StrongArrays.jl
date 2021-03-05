@@ -5,7 +5,6 @@ module StrongArrays
 
 using Base: tail, OneTo, AbstractCartesianIndex, @propagate_inbounds
 using Base.Broadcast: Broadcasted
-using StaticArrays
 
 # Tools««1
 # Tuple unrolling««2
@@ -278,5 +277,3 @@ export StrongInt, @StrongInt
 export StrongArray, StrongVector, StrongMatrix
 end # module
 #»»1
-
-nothing
