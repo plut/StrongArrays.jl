@@ -20,7 +20,13 @@ Foo = StrongInt{:Foo}
 Foo(1)
 Foo(1) + Foo(2) # basic operations are supported
 Foo(1) + 1 # but this is an error
+
+# Basic arithmetic is supported, but only additive additions, since these
+# are the only ones which make sense for indices. (More formally,
+# `StrongInt` types behave as free modules over the ring of `Int`s.)
+
 Foo(1) + one(Foo(1)) # incrementation is done this way
+
 
 # conversion is possible:
 Foo(1) == Foo(Bar(1))

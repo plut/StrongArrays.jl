@@ -150,7 +150,9 @@ end
 # I is a tuple of index types
 struct StrongArray{N,I<:Tuple{Vararg{Integer}},T,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
 	array::A
-	StrongArray{N,I,T,A}(a) where{N,I,T,A} = new{N,I,T,A}(a)
+	StrongArray{N,I,T,A}(a) where{N,I,T,A} = new{N,I,T,A}(copy(a))
+	StrongArray{N,I,T,A}(::Val{:nocopy}, a) where{N,I,T,A} =
+		new{N,I,T,A}(a)
 end
 StrongArray{N,I,T}(a::AbstractArray{T,N}) where{N,I,T} =
 		StrongArray{N,I,T,typeof(a)}(a)
@@ -171,14 +173,13 @@ Array{T,N}(a::StrongArray{N}) where{T,N} = Array{T,N}(a.array)
 @inline Base.ndims(::Type{<:StrongArray{N}}) where{N} = N
 @inline Base.ndims(a::StrongArray) = ndims(typeof(a))
 @inline indextype(::Type{<:StrongArray{N,I}}) where{N,I} = I
-@inline indextype(a::StrongArray) = indextype(a)
+@inline indextype(a::StrongArray) = indextype(typeof(a))
 @inline Base.eltype(::Type{<:StrongArray{N,I,T}}) where{N,I,T} = T
 @inline Base.eltype(a::StrongArray) = eltype(typeof(a))
-
-# Indexation ««2
-Base.size(a::StrongArray) = size(a.array)
-indextype(a::StrongArray) = indextype(typeof(a))
 indextypes(a::StrongArray) = (indextype(a).parameters...,)
+
+# Displaying ««2
+Base.size(a::StrongArray) = size(a.array)
 function Base.show(io::IO, T::MIME"text/plain", a::StrongArray)
 	print(io, "StrongArray{", indextype(a), "} wrapping ")
 	show(io, T, a.array)
@@ -188,7 +189,8 @@ Base.show(io::IO, a::StrongArray) =
 	print(io, "StrongArray{", ndims(a), ",", indextype(a), "}(",
 		a.array, ")")
 
-# Iteration««2
+Base.copy(a::StrongArray) = (typeof(a))(Val(:nocopy), copy(a.array))
+# Indexation««2
 
 Base.axes(a::StrongArray) = (map(((t,n),)->OneTo(t(n)),
 	zip(indextypes(a), size(a)))...,)
@@ -198,7 +200,7 @@ Base.axes(a::StrongArray) = (map(((t,n),)->OneTo(t(n)),
 @inline _to_index(::Type{T}, i::T, n, k) where{T<:Integer} =
 	(Int(i), false)
 @inline _to_index(::Type{T}, i::AbstractVector{T}, n, k) where{T<:Integer} =
-	(Integer.(i), true)
+	(Int.(i), true)
 @inline _to_index(::Type{<:Integer}, ::Colon, n, k) = ((:), true)
 @inline function _to_indices(a::StrongArray{N}, idx) where{N}
 	newidx = ()
@@ -222,11 +224,24 @@ end
 	(newidx, newtypes) = _to_indices(a, idx)
 	r = getindex(a.array, newidx...)
 	(newtypes == ()) && return r
-	return StrongArray{length(newtypes),Tuple{newtypes...}}(r)
+	return StrongArray{length(newtypes),Tuple{newtypes...},
+		eltype(r),typeof(r)}(Val(:nocopy), r)
 end
 
-Base.setindex!(a::StrongArray, v, idx::Integer...) =
-	setindex!(a.array, v, _to_indices(a, idx)...)
+@inline @propagate_inbounds function Base.setindex!(a::StrongArray,
+	v, idx...)
+	# FIXME: check type of v
+	(newidx, newtypes) = _to_indices(a, idx)
+	if newtypes == ()
+		setindex!(a.array, v, newidx...)
+	else
+		setindex!(a.array, Array(v), newidx...)
+	end
+	return v
+end
+
+Base.to_index(a::AbstractArray, i::StrongInt) =
+	throw(TypeError(Base.typename(typeof(a)).name, "coordinate", Int, i))
 # disable getindex and setindex
  
 # Similar and broadcast««2
