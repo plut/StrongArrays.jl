@@ -28,32 +28,34 @@ Foo(1) + 1 # but this is an error
 Foo(1) + one(Foo(1)) # incrementation is done this way
 
 
-# conversion is possible:
+# conversion is possible, but needs to be explicited:
 Foo(1) == Foo(Bar(1))
 Int(Foo(2)) == 2
+# or a::Foo = 1 (only on a local variable for now)
 
 
 # then define an array type:
-VFoo = StrongVector{Foo}
-VBar = StrongVector{Bar}
+FooVec = StrongVector{Foo}
+BarVec = StrongVector{Bar}
 
 # and use this to build arrays:
-v1 = VFoo([8,13,21])
+v1 = FooVec([8,13,21])
 v1[1] # TypeError: in coordinate 1, expected Foo, got Int64
 v1[Foo(1)] # 8
 
-v2 = VBar{Foo}([3,2,1])
+v2 = BarVec{Foo}([3,2,1])
 v2[Bar(1)] # returns Foo(3)
 v1[v2[Bar(3)]] # returns 8
 
 
-MFooBar = StrongMatrix{Foo,Bar}
-MFooInt = StrongMatrix{Foo,Int}
+FooBarMat = StrongMatrix{Foo,Bar}
+FooIntMat = StrongMatrix{Foo,Int}
 
-m1 = MFooBar([1 2;3 4])
-m2 = MFooInt([1 2;3 4])
+m1 = FooBarMat([1 2;3 4])
+m2 = FooIntMat([1 2;3 4])
 
-m1[:,Bar(2)] # is a VFoo
+m1[Foo(1),Bar(1)]
+m1[:,Bar(2)] # is a FooVec
 
 # conversion is possible:
 Vector(v1)
