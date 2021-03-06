@@ -1,5 +1,6 @@
 using StrongArrays
 using StrongArrays: IncompatibleTypes
+using StaticArrays
 using Test
 
 @StrongInt Foo
@@ -38,4 +39,15 @@ end
 m1=MFooBar([1 2;3 4])
 @test iszero(m1-m1)
 @test !iszero(2m1)
+end
+@testset "`Strong` shortcut" begin#««1
+@test Strong{Foo}Vector == StrongArray{1,Tuple{Foo}}
+@test Strong{Foo}Vector{Int} == StrongArray{1,Tuple{Foo},Int,Vector{Int}}
+@test Strong{Foo}SVector{2,Int} isa DataType
+@test Strong{Foo}SVector{2} isa UnionAll
+@test (S2i=Strong{Foo}SVector{2,Int}; S2i([1,2]).array isa SVector{2,Int})
+@test (S2=Strong{Foo}SVector{2}; S2([1,2]).array isa SVector{2,Int})
+@test Strong{Foo}Vector([1,2,3]) isa StrongVector{Foo,Int}
+@test Strong{Foo}([1,2,3]) isa StrongVector{Foo,Int}
+@test Strong{Foo}[1,2,3] isa StrongVector{Foo,Int}
 end
