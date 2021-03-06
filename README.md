@@ -62,3 +62,86 @@ Vector(v1)
 Matrix(m1)
 
 ```
+## Strongly-typed integers
+
+Each strongly-typed `Int` alias is declared using the `@StrongInt` macro:
+```julia
+@StrongInt MyIndex
+a = MyIndex(3)
+```
+These types have the properties of a module over `Int`: namely,
+they can be added, subtracted, and compared together,
+but not multiplied (which would not make sense for array indices);
+they can be multiplied by integers, reduced modulo integers,
+and divided by integers.
+
+Since `a+1` is not supported, incrementation is done by `a+one(a)`;
+the shorthand `a+one` is also provided.
+Likewise, shorthands `a > zero` and `a > one` (etc.) are also provided.
+
+As another shorthand, a `MyIndex` literal may be obtained by postfixing
+the literal by the type, in this way: `a == 3MyIndex`.
+(This saves **a whole, complete character** compared to typing
+`MyIndex(3)`!!eleven!)
+
+## Declaring strongly-indexed arrays
+
+The following types are provided:
+
+ - `StrongVector{I,T}` is a vector with contents of type `T`,
+ indexed by values with strong type `I`; `I` may be any `Integer` type,
+ including `Int`.
+ - `StrongMatrix{I,J,T}` is a matrix with contents of type `T`,
+ indexed by rows with strong type `I` and columns with strong type `J`.
+ - `StrongArray` is the general supertype.
+
+## Array operations
+
+Non-scalar indexation (i.e. by an array or a colon `:`) is supported.
+Slice extraction returns `StrongArray` with matching index types for the
+remaining dimensions. View returns a `StrongArray` wrapping a view.
+
+Broadcast operations are supported;
+therefore, for any `StrongArray` with numeric contents,
+`A + A` or `2A` should work.
+However, linear algebra is not (yet) implemented:
+`A*A` (assuming compatible index types) does not work,
+nor do scalar products, etc.
+
+Arrays with dimension ``n ≥ 2``
+generally have incompatible index types along their dimensions;
+thus, the default indexation for these `StrongArray` objects
+is cartesian. (This is different from the base `Array` case).
+
+Iterating over pairs return `StrongCartesianIndices` objects,
+which behave much like `Base.CartesianIndices`.
+(They actually even derive from the same abstract type,
+`Base.AbstractCartesianIndices`;
+however, not too many methods in `Base` actually use that abstract type).
+
+## The `Strong` constructor
+
+As a shortcut, the `Strong` constructor allows access to more or less all
+constructions:
+ - `Strong{I}Vector` is equivalent to `StrongVector{I}`;
+ - `Strong{I}Vector{T}` is equivalent to `StrongVector{I,T}`;
+ this notation helps separate index and data types, and also gives access
+ to the following:
+ - `Strong{I}SVector{2,T}` wraps a `SVector`
+ (from [`StaticArrays.jl`](https://github.com/JuliaArrays/StaticArrays.jl))
+ in a strongly-indexed type;
+
+The same notation also works for individual arrays:
+ - `Strong{I}[1,2,3]` is a strongly-indexed vector;
+ - `Strong{I,J}[1 2;3 4]` is a strongly-indexed matrix.
+
+## `wrap` and `unwrap`
+
+These two functions (not exported by the module)
+allow easy conversion between standard arrays and strongly-indexed
+arrays.
+
+ - `wrap((T1,T2,...), array)` wraps the array (no copy is done) as a
+	 `StrongArray`.
+ - `unwrap(strongarray)` accesses the inner array of a `StrongArray`
+	 (again, no copy is done).

@@ -12,6 +12,7 @@ MFooBar = StrongMatrix{Foo,Bar}
 @test_throws ErrorException Foo(1)+1
 @test Foo(1)+one(Foo) == Foo(2)
 @test_throws IncompatibleTypes Foo(1)==1
+@test 1Foo isa Foo
 end
 @testset "StrongArray" begin#««1
 v0=[0,13,21]
@@ -31,7 +32,7 @@ m1=MFooBar(m0)
 @test m1[Foo(1),:] isa VBar
 @test m1[Foo(1),Bar(2)] == 2
 @test_throws TypeError m1[1,1]
-@test_throws TypeError m0[Foo(1),Bar(2)]
+# @test_throws TypeError m0[Foo(1),Bar(2)]
 
 end
 

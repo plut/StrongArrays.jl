@@ -213,7 +213,8 @@ StrongArray{N,I}(a::AbstractArray) where{N,I} =
 (A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Int...) where{N,I,T} =
 	A(undef, dims)
 
-Array{T,N}(a::StrongArray{N}) where{T,N} = Array{T,N}(a.array)
+@inline unwrap(a::StrongArray) = a.array
+Array{T,N}(a::StrongArray{N}) where{T,N} = Array{T,N}(unwrap(a))
 
 @inline Base.ndims(::Type{<:StrongArray{N}}) where{N} = N
 @inline Base.ndims(a::StrongArray) = ndims(typeof(a))
@@ -235,19 +236,19 @@ wrap(types::Tuple{Any,Vararg{Any}}, a::AbstractArray) =
 
 
 # Displaying ««2
-Base.size(a::StrongArray) = size(a.array)
+Base.size(a::StrongArray) = size(unwrap(a))
 @inline print_typename(io::IO, a::StrongArray, x...) =
 	print(io, "StrongArray{", indextype(a), "}", x...)
 function Base.show(io::IO, T::MIME"text/plain", a::StrongArray)
 	print_typename(io, a, " wrapping ")
-	show(io, T, a.array)
+	show(io, T, unwrap(a))
 end
 
 Base.show(io::IO, a::StrongArray) =
 	print(io, "StrongArray{", ndims(a), ",", indextype(a), "}(",
-		a.array, ")")
+		unwrap(a), ")")
 
-Base.copy(a::StrongArray) = (typeof(a))(Val(:nocopy), copy(a.array))
+Base.copy(a::StrongArray) = (typeof(a))(Val(:nocopy), copy(unwrap(a)))
 # Indexation««2
 
 Base.axes(a::StrongArray) = (map(((t,n),)->OneTo(t(n)),
@@ -275,13 +276,13 @@ end
 # Base.getindex(a::StrongArray, idx::CartesianIndex) = getindex(a.array, idx)
 @inline @propagate_inbounds Base.getindex(a::StrongArray,
 		idx::StrongCartesianIndex{N,I}) where{T,N,I} =
-	getindex(a.array, Int.(Tuple(idx))...)
+	getindex(unwrap(a), Int.(Tuple(idx))...)
 @inline @propagate_inbounds Base.setindex!(a::StrongArray, v,
 		idx::StrongCartesianIndex{N,I}) where{T,N,I} =
-	setindex!(a.array, v, Int.(Tuple(idx))...)
+	setindex!(unwrap(a), v, Int.(Tuple(idx))...)
 @inline @propagate_inbounds function Base.getindex(a::StrongArray, idx...)
 	(newidx, newtypes) = _to_indices(a, idx)
-	r = getindex(a.array, newidx...)
+	r = getindex(unwrap(a), newidx...)
 	return wrap(newtypes, r)
 end
 
@@ -290,16 +291,16 @@ end
 	# FIXME: check type of v
 	(newidx, newtypes) = _to_indices(a, idx)
 	if newtypes == ()
-		setindex!(a.array, v, newidx...)
+		setindex!(unwrap(a), v, newidx...)
 	else
-		setindex!(a.array, Array(v), newidx...)
+		setindex!(unwrap(a), Array(v), newidx...)
 	end
 	return v
 end
 
 @inline @propagate_inbounds function Base.view(a::StrongArray, idx...)
 	(newidx, newtypes) = _to_indices(a, idx)
-	v = view(a.array, newidx...)
+	v = view(unwrap(a), newidx...)
 	return wrap(newtypes, v)
 end
 
@@ -312,7 +313,7 @@ end
  
 # Similar and broadcast««2
 Base.similar(a::StrongArray, ::Type{T}, dims::Dims{N}) where{T,N} =
-	StrongArray{ndims(a),indextype(a),T}(similar(a.array, T, dims))
+	StrongArray{ndims(a),indextype(a),T}(similar(unwrap(a), T, dims))
 # this is a (compatible) domain extension of the definition of
 # `Broadcast.axistype` (hence slight piracy).
 Broadcast.axistype(a::T,b::T) where{T<:OneTo} = a
