@@ -27,17 +27,10 @@ end
 Int(x::StrongInt) = x.value
 name(::Type{StrongInt{S}}) where{S} = S
 name(x::StrongInt) = name(typeof(x))
+# disambiguation with a Core constructor from "boot.jl":
 (::Type{StrongInt{S}})(a::StrongInt{S}) where{S} = StrongInt{S}(Int(a))
-Base.:<(a::J, b::J) where{J<:StrongInt} = Int(a) < Int(b)
-Base.:+(a::J, b::J) where{J<:StrongInt} = J(Int(a) + Int(b))
-Base.:-(a::J, b::J) where{J<:StrongInt} = J(Int(a) - Int(b))
-Base.:*(a::Int, b::J) where{J<:StrongInt} = J(a*Int(b))
-Base.:div(a::J, b::Integer) where{J<:StrongInt} = J(div(Int(a),b))
-Base.:rem(a::J, b::Integer) where{J<:StrongInt} = J(rem(Int(a),b))
-Base.:fld(a::J, b::Integer) where{J<:StrongInt} = J(fld(Int(a),b))
-Base.:mod(a::J, b::Integer) where{J<:StrongInt} = J(mod(Int(a),b))
-# oneunit(J::Type{<:StrongInt}) = J(1)
-# zero(J::Type{<:StrongInt}) = J(0)
+# (1MyIndex) is an alternate form of constructor
+Base.:*(a::Int, b::Type{<:StrongInt}) = b(a)
 
 """
     @StrongInt MyIndexType
@@ -52,6 +45,28 @@ macro StrongInt(name)
 			print(io, $(string(name)))
 	end
 end
+
+# Arithmetic
+# (MyIndex(1) + one) is supported
+for op in (:+, :-) @eval begin
+	Base.$op(a::J, b::J) where{J<:StrongInt} = J($op(Int(a), Int(b)))
+	Base.$op(a::StrongInt, ::typeof(one)) = typeof(a)($op(Int(a), 1))
+end end
+Base.:-(a::J) where{J<:StrongInt} = J(-Int(a))
+for op in (:<, :<=) @eval begin
+	Base.$op(a::J, b::J) where{J<:StrongInt} = $op(Int(a), Int(b))
+	Base.$op(a::StrongInt, ::typeof(zero)) = $op(Int(a), 0)
+	Base.$op(::typeof(zero), a::StrongInt) = $op(0, Int(a))
+	Base.$op(a::StrongInt, ::typeof(one)) = $op(Int(a), 1)
+	Base.$op(::typeof(one), a::StrongInt) = $op(1, Int(a))
+end end
+Base.:*(a::Int, b::StrongInt) = (typeof(a))(a*Int(b))
+for op in (:div, :rem, :fld, :mod, :fld1, :mod1) @eval begin
+	Base.$op(a::StrongInt, b::Integer) = (typeof(a))($op(Int(a), b))
+end end
+for op in (:divrem, :fldmod, :fldmod1) @eval begin
+	Base.$op(a::StrongInt, b::Integer) = (typeof(a)).($op(Int(a), b))
+end end
 
 struct IncompatibleTypes <: Exception
 	t1::Type
@@ -73,6 +88,8 @@ Base.string(x::StrongInt) = string(name(x))*"("*string(Int(x))*")"
 StrongOneTo{T} = OneTo{StrongInt{T}}
 @inline Base.eltype(::Type{OneTo{T}}) where{T} = T
 @inline Base.length(r::StrongOneTo) = Int(r.stop)
+@inline Base.length(r::AbstractUnitRange{<:StrongInt}) =
+	Int(Base.unsafe_length(r))
 AbstractUnitRange{Int}(r::StrongOneTo) = OneTo(Int(r.stop))
 
 # Index««2
