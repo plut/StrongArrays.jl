@@ -7,6 +7,10 @@ wrong variable for indexing an array. Since everything uses very thin
 wrappers of the standard array types, this should have zero performance
 cost.
 
+This package also contains a number of shorthands
+(using the large extensibility of Julia's syntax)
+so that typechecking your array indices is not too much of a hassle.
+
 
 ## Example
 ```julia
@@ -20,12 +24,14 @@ Foo = StrongInt{:Foo}
 Foo(1)
 Foo(1) + Foo(2) # basic operations are supported
 Foo(1) + 1 # but this is an error
+1Foo == Foo(1) # two notations are available for the same meaning
 
 # Basic arithmetic is supported, but only additive additions, since these
 # are the only ones which make sense for indices. (More formally,
 # `StrongInt` types behave as free modules over the ring of `Int`s.)
 
 Foo(1) + one(Foo(1)) # incrementation is done this way
+Foo(1) + one # or this way
 
 
 # conversion is possible, but needs to be explicited:
@@ -36,7 +42,7 @@ Int(Foo(2)) == 2
 
 # then define an array type:
 FooVec = StrongVector{Foo}
-BarVec = StrongVector{Bar}
+BarVec = Strong{Bar}Vector # this also works
 
 # and use this to build arrays:
 v1 = FooVec([8,13,21])
@@ -49,10 +55,11 @@ v1[v2[Bar(3)]] # returns 8
 
 
 FooBarMat = StrongMatrix{Foo,Bar}
-FooIntMat = StrongMatrix{Foo,Int}
+FooIntMat = Strong{Foo,Int}Matrix{Int}
 
 m1 = FooBarMat([1 2;3 4])
 m2 = FooIntMat([1 2;3 4])
+m3 = Strong{Foo,Int}[1 2;3 4]
 
 m1[Foo(1),Bar(1)]
 m1[:,Bar(2)] # is a FooVec
