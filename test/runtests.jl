@@ -50,4 +50,6 @@ end
 @test Strong{Foo}Vector([1,2,3]) isa StrongVector{Foo,Int}
 @test Strong{Foo}([1,2,3]) isa StrongVector{Foo,Int}
 @test Strong{Foo}[1,2,3] isa StrongVector{Foo,Int}
+@test Strong{Foo,Bar}[1 2;3 4] isa StrongMatrix{Foo,Bar,Int}
+@test Strong{Foo,Bar}([1 2;3 4]) isa StrongMatrix{Foo,Bar,Int}
 end

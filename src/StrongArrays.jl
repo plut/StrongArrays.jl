@@ -374,11 +374,15 @@ General-purpose prefix allowing transformation to a strongly-indexed array type;
 in particular:
 
  - `Strong{I}Vector`: alias for `StrongVector{I,J}`.
- - `Strong{I,J}Matrix`: alias for `StrongMatrix{I,J}`.
  - `Strong{I}SVector{3}` (or any other `AbstractArray` type):
    wraps this type in a strongly-indexed array.
  - Strong{I}([1,2,3]): wraps (without copy) the right-hand side vector
    as a `StrongVector`.
+ - Strong{I}[1,2,3]: same as above.
+
+ - `Strong{I,J}Matrix`: alias for `StrongMatrix{I,J}`.
+ - `Strong{I,J}([1 2;3 4])`: wraps (no copy) as a `StrongMatrix`.
+ - `Strong{I,J}[1 2;3 4]`: same as above.
 """
 Strong
 
@@ -392,6 +396,7 @@ StrongVector{T} = StrongArray{1,Tuple{T}}
 @inline print_typename(io::IO, a::StrongVector, x...) =
 	print(io, "StrongVector{", indextypes(a)..., "}", x...)
 Base.LinearIndices(v::StrongVector) = OneTo(indextypes(v)[1](length(v)))
+# Strong{Int}[1,2,3]
 Base.getindex(::Type{Strong{I}}, a...) where{I} =
 	wrap((I,), [a...])
 
@@ -403,7 +408,12 @@ Two-dimensional matrix with strongly-typed indices of type `T1` and `T2`.
 """
 StrongMatrix{T1,T2} = StrongArray{2,Tuple{T1,T2}}
 @inline print_typename(io::IO, a::StrongMatrix, x...) =
-	print(io, "StrongMatrix{", indextypes(a)..., "}", x...)
+	print(io, "StrongMatrix{", indextypes(a)[1], ",", indextypes(a)[2], "}", x...)
+# Strong{Int,Int}[1 2;3 4]
+Base.typed_hvcat(::Type{Strong{I,J}}, rows::Tuple{Vararg{Int}},
+	a::Number...) where{I,J}= wrap((I,J), hvcat(rows, a...))
+Base.typed_hvcat(::Type{Strong{I,J}}, rows::Tuple{Vararg{Int}},
+	a...) where{I,J}= wrap((I,J), hvcat(rows, a...))
 
 # Base.:*(::Type{Strong{I,J}},::Type{Matrix}) where{I,J} = StrongMatrix{I,J}
 # Base.:*(::Type{Strong{I,J}},A::Type{<:AbstractMatrix{T}}) where{I,J,T} =
