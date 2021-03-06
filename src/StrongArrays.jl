@@ -12,6 +12,7 @@ end
 @inline tuple_take(::Val{0}, itr, state...) = ()
 	
 # Strong integers««1
+# Types««2
 """
     StrongInt{S}
 
@@ -32,6 +33,7 @@ name(x::StrongInt) = name(typeof(x))
 # (1MyIndex) is an alternate form of constructor
 Base.:*(a::Int, b::Type{<:StrongInt}) = b(a)
 
+# @StrongInt macro««2
 """
     @StrongInt MyIndexType
 
@@ -46,7 +48,7 @@ macro StrongInt(name)
 	end
 end
 
-# Arithmetic
+# Arithmetic««2
 # (MyIndex(1) + one) is supported
 for op in (:+, :-) @eval begin
 	Base.$op(a::J, b::J) where{J<:StrongInt} = J($op(Int(a), Int(b)))
@@ -68,6 +70,7 @@ for op in (:divrem, :fldmod, :fldmod1) @eval begin
 	Base.$op(a::StrongInt, b::Integer) = (typeof(a)).($op(Int(a), b))
 end end
 
+# Detecting indexation with incompatible type««2
 struct IncompatibleTypes <: Exception
 	t1::Type
 	t2::Type
@@ -201,18 +204,9 @@ StrongArray{N,I,T}(a) where{N,I,T} =
 # 	StrongArray{eltype(a),N,I,A}(a)
 StrongArray{N,I}(a::AbstractArray) where{N,I} =
 	StrongArray{N,I,eltype(a)}(a)
+# this makes (Strong{Int}SVector{3})([1,2,3]) work as intended:
 (X::Type{StrongArray{N,I,T,<:A} where{T}})(a) where{N,I,A} =
 	StrongArray{N,I}(X.body.var.ub(a))
-
-"""
-    StrongArrays.wrap((T1,T2,...), array)
-
-Wraps a *N*-dimensional array as a `StrongArray`
-indexed by the *N* given types `T1`, `T2`, etc.
-"""
-wrap(::Tuple{}, a) = a
-wrap(types::Tuple{Any,Vararg{Any}}, a::AbstractArray) =
-	StrongArray{length(types),Tuple{types...},eltype(a),typeof(a)}(Val(:nocopy), a)
 
 (A::Type{<:StrongArray{N,I,T}})(::UndefInitializer, dims::Tuple) where{N,I,T} =
 	A(Array{T}(undef, dims))
@@ -228,6 +222,17 @@ Array{T,N}(a::StrongArray{N}) where{T,N} = Array{T,N}(a.array)
 @inline Base.eltype(::Type{<:StrongArray{N,I,T}}) where{N,I,T} = T
 @inline Base.eltype(a::StrongArray) = eltype(typeof(a))
 @inline indextypes(a::StrongArray) = (indextype(a).parameters...,)
+
+"""
+    StrongArrays.wrap((T1,T2,...), array)
+
+Wraps a *N*-dimensional array as a `StrongArray`
+indexed by the *N* given types `T1`, `T2`, etc.
+"""
+wrap(::Tuple{}, a) = a
+wrap(types::Tuple{Any,Vararg{Any}}, a::AbstractArray) =
+	StrongArray{length(types),Tuple{types...},eltype(a),typeof(a)}(Val(:nocopy), a)
+
 
 # Displaying ««2
 Base.size(a::StrongArray) = size(a.array)
@@ -298,8 +303,11 @@ end
 	return wrap(newtypes, v)
 end
 
-Base.to_index(a::AbstractArray, i::StrongInt) =
-	throw(TypeError(Base.typename(typeof(a)).name, "coordinate", Int, i))
+# Arrays which are not `Strong` are allowed to be indexed by any type of
+# integer, including StrongIntegers. To disallow this, uncomment the
+# following method definition:
+# Base.to_index(a::AbstractArray, i::StrongInt) =
+# 	throw(TypeError(Base.typename(typeof(a)).name, "coordinate", Int, i))
 # disable getindex and setindex
  
 # Similar and broadcast««2
@@ -337,9 +345,9 @@ end
 @inline Broadcast.newindex(idx::StrongCartesianIndex, keep, Idefault) =
 	typeof(idx)(Broadcast.newindex(CartesianIndex(idx), keep, Int.(Idefault)))
 
-# StrongVector and StrongMatrix ««2
 
-const _STRONG_MAX=2
+# Strong{...} constructor««2
+const _STRONG_MAX=4
 _nvar(n) = tuple((Symbol(:X,i) for i in 1:n)...,)
 # _strong_nvar(n) = Expr(:curly, :Strong, _nvar(n)...)
 @eval abstract type Strong{$(_nvar(_STRONG_MAX)...)} end
@@ -347,7 +355,7 @@ _nvar(n) = tuple((Symbol(:X,i) for i in 1:n)...,)
 for i in 1:_STRONG_MAX
 	v = _nvar(i)
 	S = :(Strong{$(v...)})
-	E= quote
+	@eval begin
 	# Strong{Int}Vector
 Base.:*(::Type{$S}, ::Type{Array{T,$i} where T}) where {$(v...)} =
 		StrongArray{$i, Tuple{$(v...)}}
@@ -364,7 +372,6 @@ Base.:*(::Type{$S}, a::AbstractArray{T,$i} where{T}) where{$(v...)} =
 $S(a::AbstractArray{T,$i} where{T}) where{$(v...)} =
 		wrap(($(v...),), a)
 	end
-	eval(E)
 end
 
 """
@@ -374,18 +381,20 @@ General-purpose prefix allowing transformation to a strongly-indexed array type;
 in particular:
 
  - `Strong{I}Vector`: alias for `StrongVector{I,J}`.
+ - `Strong{I}Vector{T}`: alias for `StrongVector{I,T}`
+   (helps separating index type from content type).
  - `Strong{I}SVector{3}` (or any other `AbstractArray` type):
    wraps this type in a strongly-indexed array.
- - Strong{I}([1,2,3]): wraps (without copy) the right-hand side vector
+ - `Strong{I}([1,2,3])`: wraps (without copy) the right-hand side vector
    as a `StrongVector`.
- - Strong{I}[1,2,3]: same as above.
-
+ - `Strong{I}[1,2,3]`: same as above.
  - `Strong{I,J}Matrix`: alias for `StrongMatrix{I,J}`.
  - `Strong{I,J}([1 2;3 4])`: wraps (no copy) as a `StrongMatrix`.
  - `Strong{I,J}[1 2;3 4]`: same as above.
 """
 Strong
 
+# StrongVector and StrongMatrix ««2
 """
     StrongVector{T}
 
