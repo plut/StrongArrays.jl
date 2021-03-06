@@ -13,6 +13,7 @@ end
 	
 # Strong integers««1
 # Types««2
+abstract type StrongInteger <: Integer end
 """
     StrongInt{S}
 
@@ -22,7 +23,7 @@ The symbol `S` is used for domain separation.
 
 Use the `@StrongInt` macro to generate such a type.
 """
-struct StrongInt{S} <: Integer
+struct StrongInt{S} <: StrongInteger
 	value::Int
 end
 Int(x::StrongInt) = x.value
@@ -31,7 +32,7 @@ name(x::StrongInt) = name(typeof(x))
 # disambiguation with a Core constructor from "boot.jl":
 (::Type{StrongInt{S}})(a::StrongInt{S}) where{S} = StrongInt{S}(Int(a))
 # (1MyIndex) is an alternate form of constructor
-Base.:*(a::Int, b::Type{<:StrongInt}) = b(a)
+Base.:*(a::Int, b::Type{<:StrongInteger}) = b(a)
 
 # @StrongInt macro««2
 """
@@ -51,23 +52,23 @@ end
 # Arithmetic««2
 # (MyIndex(1) + one) is supported
 for op in (:+, :-) @eval begin
-	Base.$op(a::J, b::J) where{J<:StrongInt} = J($op(Int(a), Int(b)))
-	Base.$op(a::StrongInt, ::typeof(one)) = typeof(a)($op(Int(a), 1))
+	Base.$op(a::J, b::J) where{J<:StrongInteger} = J($op(Int(a), Int(b)))
+	Base.$op(a::StrongInteger, ::typeof(one)) = typeof(a)($op(Int(a), 1))
 end end
-Base.:-(a::J) where{J<:StrongInt} = J(-Int(a))
+Base.:-(a::J) where{J<:StrongInteger} = J(-Int(a))
 for op in (:<, :<=) @eval begin
-	Base.$op(a::J, b::J) where{J<:StrongInt} = $op(Int(a), Int(b))
-	Base.$op(a::StrongInt, ::typeof(zero)) = $op(Int(a), 0)
-	Base.$op(::typeof(zero), a::StrongInt) = $op(0, Int(a))
-	Base.$op(a::StrongInt, ::typeof(one)) = $op(Int(a), 1)
-	Base.$op(::typeof(one), a::StrongInt) = $op(1, Int(a))
+	Base.$op(a::J, b::J) where{J<:StrongInteger} = $op(Int(a), Int(b))
+	Base.$op(a::StrongInteger, ::typeof(zero)) = $op(Int(a), 0)
+	Base.$op(::typeof(zero), a::StrongInteger) = $op(0, Int(a))
+	Base.$op(a::StrongInteger, ::typeof(one)) = $op(Int(a), 1)
+	Base.$op(::typeof(one), a::StrongInteger) = $op(1, Int(a))
 end end
-Base.:*(a::Int, b::StrongInt) = (typeof(a))(a*Int(b))
+Base.:*(a::Int, b::StrongInteger) = (typeof(a))(a*Int(b))
 for op in (:div, :rem, :fld, :mod, :fld1, :mod1) @eval begin
-	Base.$op(a::StrongInt, b::Integer) = (typeof(a))($op(Int(a), b))
+	Base.$op(a::StrongInteger, b::Integer) = (typeof(a))($op(Int(a), b))
 end end
 for op in (:divrem, :fldmod, :fldmod1) @eval begin
-	Base.$op(a::StrongInt, b::Integer) = (typeof(a)).($op(Int(a), b))
+	Base.$op(a::StrongInteger, b::Integer) = (typeof(a)).($op(Int(a), b))
 end end
 
 # Detecting indexation with incompatible type««2
@@ -78,20 +79,20 @@ end
 function Base.showerror(io::IO, e::IncompatibleTypes)
 	print(io, "Incompatible types: ", e.t1, " and ", e.t2)
 end
-Base.promote(a::Int, b::StrongInt) = throw(IncompatibleTypes(Int, typeof(b)))
-Base.promote(b::StrongInt, a::Int) = throw(IncompatibleTypes(Int, typeof(b)))
-Base.promote(a::StrongInt, b::StrongInt) =
+Base.promote(a::Int, b::StrongInteger)= throw(IncompatibleTypes(Int, typeof(b)))
+Base.promote(b::StrongInteger, a::Int) = throw(IncompatibleTypes(Int, typeof(b)))
+Base.promote(a::StrongInteger, b::StrongInteger) =
 	 throw(IncompatibleTypes(typeof(a), typeof(b)))
-Base.promote(a::T, b::T) where{T<:StrongInt} = (a,b)
+Base.promote(a::T, b::T) where{T<:StrongInteger} = (a,b)
 
-# Base.show(io::IO, x::StrongInt) = print(io, name(x), "(", Int(x), ")")
+# Base.show(io::IO, x::StrongInteger) = print(io, name(x), "(", Int(x), ")")
 Base.string(x::StrongInt) = string(name(x))*"("*string(Int(x))*")"
 
 # Ranges««1
 StrongOneTo{T} = OneTo{StrongInt{T}}
 @inline Base.eltype(::Type{OneTo{T}}) where{T} = T
 @inline Base.length(r::StrongOneTo) = Int(r.stop)
-@inline Base.length(r::AbstractUnitRange{<:StrongInt}) =
+@inline Base.length(r::AbstractUnitRange{<:StrongInteger}) =
 	Int(Base.unsafe_length(r))
 AbstractUnitRange{Int}(r::StrongOneTo) = OneTo(Int(r.stop))
 
@@ -305,7 +306,9 @@ end
 end
 
 # Arrays which are not `Strong` are allowed to be indexed by any type of
-# integer, including StrongIntegers. To disallow this, uncomment the
+# integer, including StrongInt. (If you want an array indexed *only*
+# by `Int`, you may use `StrongArray{Int}`!).
+# To disallow indexation by `StrongInt`, uncomment the
 # following method definition:
 # Base.to_index(a::AbstractArray, i::StrongInt) =
 # 	throw(TypeError(Base.typename(typeof(a)).name, "coordinate", Int, i))
@@ -424,11 +427,6 @@ Base.typed_hvcat(::Type{Strong{I,J}}, rows::Tuple{Vararg{Int}},
 	a::Number...) where{I,J}= wrap((I,J), hvcat(rows, a...))
 Base.typed_hvcat(::Type{Strong{I,J}}, rows::Tuple{Vararg{Int}},
 	a...) where{I,J}= wrap((I,J), hvcat(rows, a...))
-
-# Base.:*(::Type{Strong{I,J}},::Type{Matrix}) where{I,J} = StrongMatrix{I,J}
-# Base.:*(::Type{Strong{I,J}},A::Type{<:AbstractMatrix{T}}) where{I,J,T} =
-# 	StrongMatrix{I,J,T,A}
-# Base.:*(::Type{Strong{I,J}},a::AbstractMatrix) where{I,J} = wrap((I,J,), a)
 
 # TODO: linear algebra ««1
 
